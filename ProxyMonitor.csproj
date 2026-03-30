@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <PackageReference Include="NAudio" Version="2.2.1" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageReference Include="Renci.SshNet.Async" Version="1.4.0" />
   </ItemGroup>
 
