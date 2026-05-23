@@ -410,6 +410,11 @@ namespace UkProxyMonitor
 
         private static string Now() => DateTime.Now.ToString("dd/MM/yyyy HH:mm:ss");
 
+
+        /// <summary>
+        ///  TECH DEBT
+        ///  Replace Beep with PlayNotify(_config) and modify that method and setings page to allow muting sounds
+        /// </summary>
         private static void BeepFail()
         {
             try { Console.Beep(800, 180); } catch { }
