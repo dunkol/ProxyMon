@@ -96,17 +96,28 @@ namespace UkProxyMonitor
             var ct = _cts.Token;
 
             // Start SSH tunnel
-            try
+            var autoStartVps = AutoStartVpsCheckBox.IsChecked == true;
+
+            if (autoStartVps)
             {
-                StartSshTunnel();
-                UpdateStatus("Running", ok: true);
+                try
+                {
+                    StartSshTunnel();
+                    AppendMonitor($"[{Now()}] VPS tunnel started.");
+                    UpdateStatus("Running via VPS", ok: true);
+                }
+                catch (Exception ex)
+                {
+                    AppendMonitor($"[{Now()}] FAIL - could not start SSH tunnel: {ex.Message}");
+                    UpdateStatus("Failed to start", ok: false);
+                    StopAll();
+                    return;
+                }
             }
-            catch (Exception ex)
+            else
             {
-                AppendMonitor($"[{Now()}] FAIL - could not start SSH tunnel: {ex.Message}");
-                UpdateStatus("Failed to start", ok: false);
-                StopAll();
-                return;
+                AppendMonitor($"[{Now()}] VPS autostart disabled. Running direct country monitor only.");
+                UpdateStatus("Direct monitor", ok: true);
             }
 
             // Start monitor loop
@@ -191,7 +202,7 @@ namespace UkProxyMonitor
             _sshProc.BeginErrorReadLine();
         }
 
-        private async Task MonitorLoopAsync(CancellationToken ct)
+        private async Task MonitorLoopAsync(CancellationToken ct, bool useVpsTunnel = false)
         {
             // Primary DNS-free check: http://<VPS_IP>/health (requires nginx /health)
             var healthUrl = $"http://{_config.VpsHost}{_config.HealthPath}";
@@ -212,22 +223,28 @@ namespace UkProxyMonitor
                     // 2) Secondary: optional country check via IPinfo Lite (token)
                     string country = "?";
                     string warn = "";
-                    if (!string.IsNullOrWhiteSpace(_config.IpinfoToken))
-                    {
-                        // Lightweight request; do it at configurable cadence if you want later.
-                        country = await IpinfoLiteCountryAsync(ipinfoUrl, _config.SocksPort, ct);
-                        if (country != "GB")
-                            warn = $" WARN(UK={country})";
-                    }
 
-                    if (healthOk)
+                    if (useVpsTunnel)
                     {
-                        AppendMonitor($"[{Now()}] OK   - Proxy OK (VPS /health){warn}");
+                        if (!string.IsNullOrWhiteSpace(_config.IpinfoToken))
+                        {
+                            country = await IpinfoLiteCountryAsync(ipinfoUrl, _config.SocksPort, ct);
+                            if (country != "GB")
+                                warn = $" WARN(UK={country})";
+                        }
+
+                        if (healthOk)
+                            AppendMonitor($"[{Now()}] OK   - Proxy OK (VPS /health){warn}");
+                        else
+                        {
+                            AppendMonitor($"[{Now()}] FAIL - Proxy path DOWN (VPS /health)");
+                            BeepFail();
+                        }
                     }
                     else
                     {
-                        AppendMonitor($"[{Now()}] FAIL - Proxy path DOWN (VPS /health)");
-                        BeepFail();
+                        country = await IpinfoDirectCountryAsync(ipinfoUrl, ct);
+                        AppendMonitor($"[{Now()}] DIRECT - Current country: {country}");
                     }
                 }
                 catch (OperationCanceledException)
@@ -242,6 +259,34 @@ namespace UkProxyMonitor
 
                 await Task.Delay(TimeSpan.FromSeconds(_config.MonitorIntervalSeconds), ct);
             }
+        }
+
+        private async Task<string> IpinfoDirectCountryAsync(string url, CancellationToken ct)
+        {
+            var curl = _config.CurlExePath;
+
+            // Needed to add --silent because some ISP's block certificate revokation requests
+            var args = $"--silent --ssl-no-revoke --show-error --max-time 6 \"{url}\"";
+
+            var (exit, output) = await ProcessUtil.RunAsync(curl, args, ct);
+
+            if (exit != 0 || string.IsNullOrWhiteSpace(output))
+                return "?";
+
+            var idx = output.IndexOf("\"country\"", StringComparison.OrdinalIgnoreCase);
+            if (idx < 0) return "?";
+
+            var colon = output.IndexOf(':', idx);
+            if (colon < 0) return "?";
+
+            var quote1 = output.IndexOf('"', colon + 1);
+            if (quote1 < 0) return "?";
+
+            var quote2 = output.IndexOf('"', quote1 + 1);
+            if (quote2 < 0) return "?";
+
+            var val = output.Substring(quote1 + 1, quote2 - quote1 - 1).Trim();
+            return string.IsNullOrWhiteSpace(val) ? "?" : val;
         }
 
         private static string BuildIpinfoLiteUrl(string? token)
@@ -299,13 +344,23 @@ namespace UkProxyMonitor
             SshLog.ScrollToEnd();
         });
 
+        /// <summary>
+        /// TECH DEBT
+        /// This method needs refactoring with RegEx to avoid "TOKEN" returning true when checking for "OK"
+        /// Also need to move case checking something like:
+        /// 
+        /// var upper = line.ToUpperInvariant();
+        ///     if (upper.Contains("FAIL"))
+        ///     
+        /// </summary>
+        /// <param name="line"></param>
         private void AppendMonitor(string line) => Dispatcher.Invoke(() =>
         {
-            Brush colour = Brushes.LightGray;
+            Brush colour = Brushes.LightSkyBlue;
 
             if (line.Contains("FAIL", StringComparison.OrdinalIgnoreCase) ||
-                line.Contains("ERROR", StringComparison.OrdinalIgnoreCase) ||
-                line.Contains("exception", StringComparison.OrdinalIgnoreCase))
+                line.Contains("ERROR", StringComparison.OrdinalIgnoreCase) ||                
+                line.Contains("EXCEPTION", StringComparison.OrdinalIgnoreCase))
             {
                 colour = Brushes.OrangeRed;
             }
@@ -314,23 +369,32 @@ namespace UkProxyMonitor
             {
                 colour = Brushes.Gold;
             }
-            else if (line.Contains("OK", StringComparison.OrdinalIgnoreCase) ||
-                     line.Contains("Started", StringComparison.OrdinalIgnoreCase) ||
-                     line.Contains("Running", StringComparison.OrdinalIgnoreCase))
-            {
-                colour = Brushes.LightGreen;
-            }
-            else if (line.Contains("Stopped", StringComparison.OrdinalIgnoreCase))
+            else if (line.Contains("SECONDARY", StringComparison.OrdinalIgnoreCase) ||
+                     line.Contains("IPINFO", StringComparison.OrdinalIgnoreCase) ||
+                     line.Contains("AUTOSTART", StringComparison.OrdinalIgnoreCase) ||
+                     line.Contains("PRIMARY", StringComparison.OrdinalIgnoreCase))
             {
                 colour = Brushes.LightSkyBlue;
             }
+            else if (line.Contains("OK", StringComparison.OrdinalIgnoreCase) ||
+                     line.Contains("LOADED", StringComparison.OrdinalIgnoreCase) ||
+                     line.Contains("DIRECT", StringComparison.OrdinalIgnoreCase))
+            {
+                colour = Brushes.LimeGreen;
+            }
+            else if (line.Contains("STARTED", StringComparison.OrdinalIgnoreCase) ||
+                     line.Contains("STOPPED", StringComparison.OrdinalIgnoreCase) ||
+                     line.Contains("RUNNING", StringComparison.OrdinalIgnoreCase))
+            {
+                colour = Brushes.Gold;
+            }
 
             MonitorLog.Document.Blocks.Add(
-                new Paragraph(new Run(line))
-                {
-                    Foreground = colour,
-                    Margin = new Thickness(0)
-                });
+                    new Paragraph(new Run(line))
+                    {
+                        Foreground = colour,
+                        Margin = new Thickness(0)
+                    });
 
             MonitorLog.ScrollToEnd();
         });

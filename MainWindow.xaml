@@ -44,7 +44,8 @@
                     <ColumnDefinition Width="90"/>
                     <ColumnDefinition Width="10"/>
                     <ColumnDefinition Width="90"/>
-                    <ColumnDefinition Width="28"/>
+                    <ColumnDefinition Width="20"/>
+                    <ColumnDefinition Width="160"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
 
@@ -60,15 +61,22 @@
                         Content="Stop"
                         Click="Stop_Click"/>
 
-                <TextBlock Grid.Column="4"
-                           x:Name="StatusText"
-                           VerticalAlignment="Center"
-                           FontWeight="Bold"
-                           Foreground="Cyan"
-                           Text="Idle"/>
-            </Grid>
+                <CheckBox Grid.Column="4"
+                  x:Name="AutoStartVpsCheckBox"
+                  Content="Autostart VPS"
+                  Foreground="Cyan"
+                  VerticalAlignment="Center"
+                  IsChecked="False"/>
 
-            <!-- SSH section -->
+                        <TextBlock Grid.Column="5"
+                   x:Name="StatusText"
+                   VerticalAlignment="Center"
+                   FontWeight="Bold"
+                   Foreground="Cyan"
+                   Text="Idle"/>
+                    </Grid>
+
+                    <!-- SSH section -->
             <GroupBox Grid.Row="2"
                       Header="SSH Tunnel Output"
                       Foreground="Cyan"
