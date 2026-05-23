@@ -96,7 +96,7 @@
                       BorderBrush="#A0A0A0"
                       Background="Black"
                       Padding="4">
-                <TextBox x:Name="MonitorLog"
+                <RichTextBox x:Name="MonitorLog"
                          Background="Black"
                          Foreground="Cyan"
                          BorderThickness="0"
@@ -105,7 +105,6 @@
                          IsReadOnly="True"
                          AcceptsReturn="True"
                          AcceptsTab="True"
-                         TextWrapping="NoWrap"
                          VerticalScrollBarVisibility="Auto"
                          HorizontalScrollBarVisibility="Auto"/>
             </GroupBox>

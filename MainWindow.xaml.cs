@@ -1,11 +1,10 @@
-﻿using System;
+﻿using Microsoft.Win32;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Windows;
-using Microsoft.Win32;
+using System.Windows.Documents;
+using System.Windows.Media;
 
 namespace UkProxyMonitor
 {
@@ -25,6 +24,7 @@ namespace UkProxyMonitor
             UpdateStatus("Idle", ok: true);
 
             AppendMonitor($"[{Now()}] Loaded config. VPS={_config.VpsUser}@{_config.VpsHost}, SOCKS=127.0.0.1:{_config.SocksPort}");
+
             if (!string.IsNullOrWhiteSpace(_config.IpinfoToken))
                 AppendMonitor($"[{Now()}] IPinfo token present: country check enabled.");
             else
@@ -44,6 +44,7 @@ namespace UkProxyMonitor
         {
             var w = new SettingsWindow(_config);
             w.Owner = this;
+
             if (w.ShowDialog() == true)
             {
                 _config = w.Config;
@@ -73,7 +74,11 @@ namespace UkProxyMonitor
             sb.AppendLine(SshLog.Text);
             sb.AppendLine();
             sb.AppendLine("=== MONITOR LOG ===");
-            sb.AppendLine(MonitorLog.Text);
+
+            sb.AppendLine(new TextRange(
+                MonitorLog.Document.ContentStart,
+                MonitorLog.Document.ContentEnd
+            ).Text);
 
             File.WriteAllText(dlg.FileName, sb.ToString(), Encoding.UTF8);
             AppendMonitor($"[{Now()}] Logs saved: {dlg.FileName}");
@@ -296,7 +301,37 @@ namespace UkProxyMonitor
 
         private void AppendMonitor(string line) => Dispatcher.Invoke(() =>
         {
-            MonitorLog.AppendText(line + Environment.NewLine);
+            Brush colour = Brushes.LightGray;
+
+            if (line.Contains("FAIL", StringComparison.OrdinalIgnoreCase) ||
+                line.Contains("ERROR", StringComparison.OrdinalIgnoreCase) ||
+                line.Contains("exception", StringComparison.OrdinalIgnoreCase))
+            {
+                colour = Brushes.OrangeRed;
+            }
+            else if (line.Contains("WARN", StringComparison.OrdinalIgnoreCase) ||
+                     line.Contains("WARNING", StringComparison.OrdinalIgnoreCase))
+            {
+                colour = Brushes.Gold;
+            }
+            else if (line.Contains("OK", StringComparison.OrdinalIgnoreCase) ||
+                     line.Contains("Started", StringComparison.OrdinalIgnoreCase) ||
+                     line.Contains("Running", StringComparison.OrdinalIgnoreCase))
+            {
+                colour = Brushes.LightGreen;
+            }
+            else if (line.Contains("Stopped", StringComparison.OrdinalIgnoreCase))
+            {
+                colour = Brushes.LightSkyBlue;
+            }
+
+            MonitorLog.Document.Blocks.Add(
+                new Paragraph(new Run(line))
+                {
+                    Foreground = colour,
+                    Margin = new Thickness(0)
+                });
+
             MonitorLog.ScrollToEnd();
         });
 
