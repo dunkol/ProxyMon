@@ -168,7 +168,6 @@ namespace UkProxyMonitor
 
             var hostDest = $"{_config.VpsUser}@{_config.VpsHost}";
 
-            // NOTE: we don’t use -N? We DO use -N (no remote command).
             // We do NOT print secrets. Key is a path only.
             string args =
                 $"-i \"{_config.KeyPath}\" " +
@@ -292,8 +291,8 @@ namespace UkProxyMonitor
         private static string BuildIpinfoLiteUrl(string? token)
         {
             // IPinfo Lite endpoint: we only care about country code
-            // We'll call: https://ipinfo.io/json?token=XYZ
-            // (Lite returns minimal data including country)
+            // call: https://ipinfo.io/json?token=XYZ
+            // (Lite version (my subscription) returns minimal data including country)
             // If token is blank, this won’t be used.
             return $"https://ipinfo.io/json?token={token}";
         }
@@ -325,16 +324,21 @@ namespace UkProxyMonitor
                 return "?";
 
             // Very simple parse: look for "country": "GB"
-            // You can replace with System.Text.Json later.
+            // Replace with System.Text.Json later.
             var idx = output.IndexOf("\"country\"", StringComparison.OrdinalIgnoreCase);
             if (idx < 0) return "?";
+
             var colon = output.IndexOf(':', idx);
             if (colon < 0) return "?";
+
             var quote1 = output.IndexOf('"', colon + 1);
             if (quote1 < 0) return "?";
+
             var quote2 = output.IndexOf('"', quote1 + 1);
             if (quote2 < 0) return "?";
+
             var val = output.Substring(quote1 + 1, quote2 - quote1 - 1).Trim();
+
             return string.IsNullOrWhiteSpace(val) ? "?" : val;
         }
 
@@ -347,10 +351,6 @@ namespace UkProxyMonitor
         /// <summary>
         /// TECH DEBT
         /// This method needs refactoring with RegEx to avoid "TOKEN" returning true when checking for "OK"
-        /// Also need to move case checking something like:
-        /// 
-        /// var upper = line.ToUpperInvariant();
-        ///     if (upper.Contains("FAIL"))
         ///     
         /// </summary>
         /// <param name="line"></param>
