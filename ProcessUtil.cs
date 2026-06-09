@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 
 namespace UkProxyMonitor
 {
+    // Wrapper to fire up console windows for SSH SOCKS into my VPS or to call IP Info and return output to this app
     public static class ProcessUtil
     {
         public static async Task<(int ExitCode, string Output)> RunAsync(string file, string args, CancellationToken ct)
